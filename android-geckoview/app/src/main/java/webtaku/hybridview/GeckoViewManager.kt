@@ -1,6 +1,7 @@
 package webtaku.hybridview
 
 import android.content.Context
+import android.graphics.Color
 import org.mozilla.geckoview.BuildConfig
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
@@ -27,6 +28,7 @@ class GeckoViewManager(context: Context, geckoView: GeckoView) {
     init {
         geckoSession.open(getRuntime(context))
         geckoView.setSession(geckoSession)
-        geckoSession.loadUri("https://google.com")
+        geckoView.coverUntilFirstPaint(Color.BLACK)
+        geckoSession.loadUri("resource://android/assets/web/index.html")
     }
 }
