@@ -5,9 +5,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import org.mozilla.geckoview.GeckoSession
+import org.json.JSONObject
 import org.mozilla.geckoview.GeckoView
-import webtaku.hybridview.GeckoViewManager
 
 class MainActivity : AppCompatActivity() {
 
@@ -25,5 +24,9 @@ class MainActivity : AppCompatActivity() {
         }
         geckoView = findViewById(R.id.geckoView)
         geckoViewManager = GeckoViewManager(this, geckoView)
+
+        geckoViewManager.sendToWeb("test", JSONObject().apply {
+            put("value", 123)
+        })
     }
 }

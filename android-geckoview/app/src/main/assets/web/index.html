@@ -1,1 +1,13 @@
 Hello, GeckoView!
+
+<script>
+  window.addEventListener("message", (event) => {
+    const msg = event.data;
+    if (!msg || msg.__from !== "android") return;
+
+    alert(JSON.stringify(msg));
+  });
+
+  const req = { __to: "android", action: "test", data: { value: 123 } };
+  window.postMessage(req, "*");
+</script>
