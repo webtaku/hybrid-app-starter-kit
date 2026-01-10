@@ -1,17 +1,19 @@
 package webtaku.hybridview
 
+import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Color
 import android.util.Log
 import org.json.JSONObject
 import org.mozilla.geckoview.BuildConfig
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebExtension
 
-class GeckoViewManager(context: Context, view: GeckoView) {
+class GeckoViewManager(private val context: Context, view: GeckoView) {
     companion object {
         private const val TAG = "GeckoViewManager"
         private const val EXTENSION_ID = "nativebridge@hybridview"
@@ -23,7 +25,7 @@ class GeckoViewManager(context: Context, view: GeckoView) {
         fun getRuntime(context: Context): GeckoRuntime {
             if (runtime == null) {
                 val settings = GeckoRuntimeSettings.Builder().consoleOutput(true)
-                    .debugLogging(BuildConfig.DEBUG).build()
+                    .debugLogging(BuildConfig.DEBUG).remoteDebuggingEnabled(true).build()
                 runtime = GeckoRuntime.create(context, settings)
             }
             return runtime!!
@@ -36,15 +38,21 @@ class GeckoViewManager(context: Context, view: GeckoView) {
     private val pendingToWeb = ArrayDeque<JSONObject>()
 
     init {
-        var runtime = getRuntime(context)
+        val runtime = getRuntime(context)
         session.open(runtime)
+        session.promptDelegate = PromptDelegate()
 
         view.coverUntilFirstPaint(Color.BLACK)
         view.setSession(session)
 
         runtime.webExtensionController.ensureBuiltIn(EXTENSION_LOCATION, EXTENSION_ID)
             .accept({ extension ->
-                view.post { extension?.setMessageDelegate(messageDelegate, NATIVE_APP) }
+                Log.d(TAG, "Extension installed: ${extension?.id}")
+                extension?.let {
+                    session.webExtensionController.setMessageDelegate(
+                        it, messageDelegate, NATIVE_APP
+                    )
+                }
             }, { exception ->
                 Log.e(TAG, "Failed to install WebExtension", exception)
             })
@@ -52,16 +60,33 @@ class GeckoViewManager(context: Context, view: GeckoView) {
         session.loadUri("resource://android/assets/web/index.html")
     }
 
-    fun sendToWeb(action: String, data: JSONObject? = null) {
-        val message = JSONObject().apply {
-            put("action", action)
-            data?.let { put("data", it) }
+    inner class PromptDelegate : GeckoSession.PromptDelegate {
+        override fun onAlertPrompt(
+            session: GeckoSession, prompt: GeckoSession.PromptDelegate.AlertPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+            val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+            AlertDialog.Builder(context).setTitle(prompt.title).setMessage(prompt.message)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    result.complete(prompt.dismiss())
+                }.setOnCancelListener {
+                    result.complete(prompt.dismiss())
+                }.show()
+            return result
         }
-        val p = port
-        if (p == null) {
-            pendingToWeb.addLast(message)
-        } else {
-            p.postMessage(message)
+
+        override fun onButtonPrompt(
+            session: GeckoSession, prompt: GeckoSession.PromptDelegate.ButtonPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+            val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+            AlertDialog.Builder(context).setTitle(prompt.title).setMessage(prompt.message)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    result.complete(prompt.confirm(GeckoSession.PromptDelegate.ButtonPrompt.Type.POSITIVE))
+                }.setNegativeButton(android.R.string.cancel) { _, _ ->
+                    result.complete(prompt.confirm(GeckoSession.PromptDelegate.ButtonPrompt.Type.NEGATIVE))
+                }.setOnCancelListener {
+                    result.complete(prompt.dismiss())
+                }.show()
+            return result
         }
     }
 
@@ -92,6 +117,19 @@ class GeckoViewManager(context: Context, view: GeckoView) {
             while (pendingToWeb.isNotEmpty()) {
                 port.postMessage(pendingToWeb.removeFirst())
             }
+        }
+    }
+
+    fun sendToWeb(action: String, data: JSONObject? = null) {
+        val message = JSONObject().apply {
+            put("action", action)
+            data?.let { put("data", it) }
+        }
+        val p = port
+        if (p == null) {
+            pendingToWeb.addLast(message)
+        } else {
+            p.postMessage(message)
         }
     }
 }
